@@ -1,0 +1,51 @@
+services:
+  postgres:
+    # BEST PRACTICE: Pin a specific major version (e.g., 16) instead of 'latest'
+    # to prevent breaking changes during automatic updates.
+    image: postgres:17-alpine
+    container_name: postgres_db
+    
+    # BEST PRACTICE: Auto-restart the container if it crashes or the server reboots.
+    restart: unless-stopped
+    
+    # BEST PRACTICE: Use a dedicated non-default network for isolation.
+    networks:
+      - db_network
+
+    # BEST PRACTICE: Don't hardcode secrets. Read them from a .env file.
+    env_file:
+      - .env
+    
+    # BEST PRACTICE: Persist data using a named volume so it survives container removal.
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Optional: Auto-run SQL scripts on first startup (e.g., create tables/users)
+      # - ./init_scripts:/docker-entrypoint-initdb.d
+    
+    # BEST PRACTICE: Expose ports only to localhost for security, 
+    # unless you need external access (then use just "5432:5432").
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    # BEST PRACTICE: Define limits to prevent the DB from consuming all host memory.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+    # BEST PRACTICE: Healthcheck ensures dependent services wait until 
+    # Postgres is actually ready to accept connections.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pg_data:
+
+networks:
+  db_network:
+    driver: bridge
