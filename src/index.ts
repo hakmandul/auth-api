@@ -2,30 +2,36 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth } from "./auth";
 
-const app = new Hono();
+// Лучшая практика: используем basePath, если Nginx проксирует /api на этот сервис
+// Если в Nginx: location /api/ { proxy_pass ... } передает полный путь, то Hono должен ожидать /api
+const app = new Hono().basePath('/api');
 
-// 1. Настройка CORS (КРИТИЧНО для Nuxt)
-// Nuxt (frontend) будет стучаться с localhost:3000
+// 1. Настройка CORS
 app.use(
-  "/api/*",
+  "/*", // Применяем ко всем роутам внутри basePath
   cors({
-    origin: ["http://localhost:3000"], // Адрес твоего Nuxt приложения
-    allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["POST", "GET", "OPTIONS"],
+    // В продакшене это ваш домен. В разработке - localhost.
+    origin: [
+        process.env.FRONTEND_URL || "https://your-site.com", 
+        "http://localhost:3000" // Оставляем для локальной разработки
+    ],
+    allowHeaders: ["Content-Type", "Authorization", "Cookie"], // Cookie важно для сессий
+    allowMethods: ["POST", "GET", "OPTIONS", "PUT", "DELETE"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
-    credentials: true, // ОБЯЗАТЕЛЬНО true, чтобы передавались куки сессии
+    credentials: true,
   })
 );
 
 // 2. Монтируем Better-Auth
-// Better-auth обрабатывает запросы на /api/auth/*
-app.on(["POST", "GET"], "/api/auth/**", (c) => {
+// Теперь путь будет /api/auth/** автоматически из-за basePath('/api')
+app.on(["POST", "GET"], "/auth/**", (c) => {
   return auth.handler(c.req.raw);
 });
 
-// 3. Пример защищенного роута
-app.get("/api/me", async (c) => {
+// 3. Защищенный роут
+// Путь станет: /api/me
+app.get("/me", async (c) => {
     const session = await auth.api.getSession({
         headers: c.req.raw.headers
     });
@@ -41,6 +47,7 @@ app.get("/api/me", async (c) => {
 });
 
 export default {
-    port: 3001, // Запускаем бэкенд на порту 3001
+    // Берем порт из .env или ставим 3001 по умолчанию
+    port: process.env.PORT || 3001, 
     fetch: app.fetch,
 }
